@@ -1,0 +1,223 @@
+---
+title: ""
+output: 
+  html_document:
+    theme: flatly
+---
+
+# Introduction
+* In order to help physicians identify and manage children with clinically significant hypertension, the American Academy of Pediatricians (AAP) released the ["Fourth Report on the Diagnosis, Evaluation, and Treatment of High Blood Pressure in Children and Adolescents""](http://pediatrics.aappublications.org/content/114/Supplement_2/555.long) in 2004
+    * In particular, the Fourth Report provided percentile based guidelines for systolic and diastolic blood pressure relative to height and age. 
+* In 2017, the AAP released updated guidelines titled ["Clinical Practice Guideline for Screening and Management of High Blood Pressure in Children and Adolescents"](http://pediatrics.aappublications.org/content/140/3/e20171904).
+    * Unlike those in the Fourth Report, the data used to generate percentile values in the 2017 guidelines excluded overweight and obese individuals in order to eliminate bias from the association between body habitus and hypertension.
+* This calculator provides systolic and diastolic blood pressure percentile values based on the updated 2017 guidelines.
+
+# Modeling percentile values
+* The methods used to generate percentile values from blood pressure data are described in ["Determination of Blood Pressure Percentiles in Normal-Weight Children: Some Methodological Issues."](https://academic.oup.com/aje/article/167/6/653/154351)
+* In brief, percentile values are calculated from a "quantile spline regression" model fit to the blood pressure, age, sex, and height data of approximately 50,000 children.
+* MORE COMING SOON
+
+
+        
+
+# Constructing the blood pressure app
+* The details of the quantile spline regression with coefficient values and testing data can be found at https://sites.google.com/a/channing.harvard.edu/bernardrosner/pediatric-blood-press/childhood-blood-pressure.
+
+#### Generating age/height-based percentile tables
+
+* The `percentileCalculator()` function generates the predicted 1st-99th blood pressure percentiles for a given age, sex, and height by applying the model coefficient values to the supplied data.
+
+```{r,cache=T,indent = '    ', message = F}
+library(dplyr)
+x <- 128.2 #height
+y <- 6 #age
+w <- (y-10)*(x-150) #Interaction term between height and age
+
+#Call appropriate spline knots for M vs. F
+source("splineKnots_M.R")
+data.frame(t1m,t2m,t3m,t4m,t5m,ta1m,ta2m,ta3m,ta4m,ta5m,tb1m,tb2m,tb3m,tb4m,tb5m)
+
+#Manually adjust knot points based on height, age, and interaction term (copied from published SAS code)
+if (x-t1m < 0) {x2a=0} else {x2a=x-t1m}
+if (x-t4m < 0) {x2b=0} else {x2b=x-t4m}
+if (x-t5m < 0) {x2c=0} else {x2c=x-t5m}
+x2=x2a^3-x2b^3*(t5m-t1m)/(t5m-t4m)+x2c^3*(t4m-t1m)/(t5m-t4m)
+if (x-t2m < 0) {x3a=0} else {x3a=x-t2m}
+x3=x3a^3-x2b^3*(t5m-t2m)/(t5m-t4m)+x2c^3*(t4m-t2m)/(t5m-t4m)
+if (x-t3m < 0) {x4a=0} else {x4a=x-t3m}
+x4=x4a^3-x2b^3*(t5m-t3m)/(t5m-t4m)+x2c^3*(t4m-t3m)/(t5m-t4m)
+x2s=x2/100
+x3s=x3/100
+x4s=x4/100
+
+if (y-ta1m < 0 ) { y2a=0}  else {y2a=y-ta1m}
+if (y-ta4m < 0 ) { y2b=0}  else {y2b=y-ta4m}
+if (y-ta5m < 0 ) { y2c=0}  else {y2c=y-ta5m}
+y2=y2a^3-y2b^3*(ta5m-ta1m)/(ta5m-ta4m)+y2c^3*(ta4m-ta1m)/(ta5m-ta4m)
+if (y-ta2m < 0 ) { y3a=0}  else {y3a=y-ta2m}
+y3=y3a^3-y2b^3*(ta5m-ta2m)/(ta5m-ta4m)+y2c^3*(ta4m-ta2m)/(ta5m-ta4m)
+if (y-ta3m < 0 ) { y4a=0}  else {y4a=y-ta3m}
+y4=y4a^3-y2b^3*(ta5m-ta3m)/(ta5m-ta4m)+y2c^3*(ta4m-ta3m)/(ta5m-ta4m)
+y2s=y2/100
+y3s=y3/100
+y4s=y4/100
+
+if (w-tb1m < 0 ) { w2a=0}  else {w2a=w-tb1m}
+if (w-tb4m < 0 ) { w2b=0}  else {w2b=w-tb4m}
+if (w-tb5m < 0 ) { w2c=0}  else {w2c=w-tb5m}
+w2=w2a^3-w2b^3*(tb5m-tb1m)/(tb5m-tb4m)+w2c^3*(tb4m-tb1m)/(tb5m-tb4m)
+if (w-tb2m < 0 ) { w3a=0}  else {w3a=w-tb2m}
+w3=w3a^3-w2b^3*(tb5m-tb2m)/(tb5m-tb4m)+w2c^3*(tb4m-tb2m)/(tb5m-tb4m)
+if (w-tb3m < 0 ) { w4a=0}  else {w4a=w-tb3m}
+w4=w4a^3-w2b^3*(tb5m-tb3m)/(tb5m-tb4m)+w2c^3*(tb4m-tb3m)/(tb5m-tb4m)
+w2s=w2/100^2
+w3s=w3/100^2
+w4s=w4/100^2
+
+spline.position <- c("1"=1, "x"=x, "x2s"=x2s, "x3s"=x3s, "x4s"=x4s, 
+                   "y"=y, "y2s"=y2s, "y3s"=y3s, "y4s"=y4s, 
+                   "w"=w, "w2s"=w2s, "w3s"=w3s, "w4s"=w4s)
+spline.position
+
+#Call appropriate regression coefficients for M vs. F and SBP vs. DBP
+df <- read.csv("SBP_M_coef.csv", row.names = 1)
+df <- df %>%
+  select(b0sys,
+         b1sys,b2sys,b3sys,b4sys,
+         ba1sys,ba2sys,ba3sys,ba4sys,
+         bb1sys,bb2sys,bb3sys,bb4sys)
+head(df)
+
+#Manually calculate quantile values from combination of knot points and coefficients
+df <- data.frame(t(apply(df, 1, function(x) x*spline.position)))
+df <- data.frame(percentile = 1:99/100, fxsys = apply(df, 1, sum))
+#The above 2 lines corresponds to the published SAS code:
+    # array b0sys{*}  inter1-inter99;
+    # array b1sys{*}  b1sys1-b1sys99;
+    # array b2sys{*}  b2sys1-b2sys99;
+    # array b3sys{*}  b3sys1-b3sys99;
+    # array b4sys{*}  b4sys1-b4sys99;
+    # array ba1sys{*} ba1sys1-ba1sys99;
+    # array ba2sys{*} ba2sys1-ba2sys99;
+    # array ba3sys{*} ba3sys1-ba3sys99;
+    # array ba4sys{*} ba4sys1-ba4sys99;
+    # array bb1sys{*} bb1sys1-bb1sys99;
+    # array bb2sys{*} bb2sys1-bb2sys99;
+    # array bb3sys{*} bb3sys1-bb3sys99;
+    # array bb4sys{*} bb4sys1-bb4sys99;
+    # array fxsys{*}  fxsys1-fxsys99;
+    # array difsys{*} difsys1-difsys99;
+    # 
+    # do i=1 to 99;
+    #   fxsys{i}=b0sys{i}+b1sys{i}*x+b2sys{i}*x2s+b3sys{i}*x3s+b4sys{i}*x4s
+    #           +ba1sys{i}*y+ba2sys{i}*y2s+ba3sys{i}*y3s+ba4sys{i}*y4s
+    #           +bb1sys{i}*w+bb2sys{i}*w2s+bb3sys{i}*w3s+bb4sys{i}*w4s;
+    #   difsys{i} =abs(sysbp-fxsys{i});
+    # end;
+head(df)
+
+#Same result is acheived from the function
+source("percentileCalculator.R")
+head(percentileCalculator(age = 6, height = 128.2, sex = "M", SBP.DBP = "SBP"))
+```
+  * This indicates that, for a 6 year old male with a height of 128.2cm, the 1st percentile for SBP would be 78.6, the 2nd percentile would be 80.1, and so on. 
+
+#### Calculating patient specific values and cutoffs
+
+* The `BPappCalculation()` function takes the output from `percentileCalculator()` and applies it to an individual's blood pressure to generate the patient's BP percentile, guideline cutoff values, and a graphical representation of the data
+```{r,cache=T,indent = '    '}
+BP <- 87.166
+table <- percentileCalculator(6, 128.2, "M", "SBP")
+#Calculates the patient's percentile based on finding the value in the percentil table with the least difference to the patient's blood pressure
+pcnt <- which.min(abs(BP-table$fxsys))
+#The median BP for the patient's demographic is the 50th percentile
+median <- table$fxsys[50]
+#Guidelines specify the 90th percentile as elevated
+elevated <- table$fxsys[90]
+#Guidelines specify the 95th percentile as stage 1 hypertension
+stage1 <- table$fxsys[95]
+#Guidelines specify 12mmHg above the 95th percentile as stage 2 hypertension
+stage2 <- stage1+12
+#The following generates a plot of the patient's blood pressure relative to the values on the percentile table, annotated by guideline criteria
+plot <- ggplot(table, aes(x = fxsys, y = percentile*100)) +
+  geom_area(data=table[which(table$fxsys<=elevated),], fill = "green", alpha = 0.25)+
+  geom_area(data=table[which(table$fxsys>=elevated & table$fxsys<=stage1),], fill = "yellow", alpha = 0.25)+
+  geom_area(data=table[which(table$fxsys>=stage1),], fill = "red", alpha = 0.25)+
+  geom_line(size=1) +
+  geom_point(aes(x = BP, y = pcnt), shape = 21, color = "black", fill= "red", size = 3, stroke = 2) +
+  theme_classic() +
+  labs(x="mmHg", y="Percentile") +
+  theme(plot.title = element_text(hjust = 0.5,
+                                  size = 16,
+                                  face = "bold"))
+#All the above values are contained within a list
+output <- list(
+  "table" = table,
+  "pcnt" = pcnt,
+  "median" = median,
+  "elevated" = elevated,
+  "stage1" = stage1,
+  "stage2" = stage2,
+  "plot" = plot
+)
+data.frame(output$pcnt, output$median, output$elevated, output$stage1, output$stage2)
+
+#Same result is acheived from the function
+source("BPappCalculations.R")
+output <- BPappCalculations(age = 6, height = 128.2, sex = "M", SBP.DBP = "SBP", BP = 87.166)
+data.frame(output$pcnt, output$median, output$elevated, output$stage1, output$stage2)
+output$plot
+``` 
+
+# Validating the app
+
+* The original source information includes a test data set `sample_data.txt` as well as `sample_output.txt` that includes both this data and the results of passing it through the published `childhoodbppct.sas` SAS code.
+```{r,cache=T,indent = '    '}
+df <- read.table("sample_output.txt", header = T, stringsAsFactors = F)
+head(df)
+```
+    * `sex` is the coded sex with male = 1 and female = 2
+    * `sysbp` and `diask5` represent the patient's systolic and diastolic blood pressure, respectively
+      * For these columns, `.` represents missing data
+    * `syspct` and `diaspct` represent the calculated systolic and diastolic blood pressure percentiles, respectively, by `childhoodbppct.sas`
+      * For these columns, `.` represents data that was not calculated either due to missing input data or due to the patient's height representing an age-adjusted outlier
+* We will perform some data cleanup to refactor, rename, and and exclude incomplete data for this test
+```{r,cache=T,indent = '    ', warning=FALSE, message = F}
+library(dplyr); library(ggplot2)
+df <- df %>% mutate(sex = recode(sex, "1" = "M", "2" = "F"),
+         age= as.numeric(age),
+         height = as.numeric(height),
+         SBP = as.numeric(sysbp),
+         DBP = as.numeric(diask5),
+         pub.SBP.pct = syspct,
+         pub.DBP.pct = diaspct
+         ) %>%
+  na.omit %>% select(Obs, sex, age, height, SBP, DBP, pub.SBP.pct, pub.DBP.pct)
+head(df)
+```
+* Now we will calculate blood pressure percentiles using our function
+```{r,cache=T,indent = '    ', warning=FALSE}
+source("BPappCalculations.R"); source("percentileCalculator.R")
+df <- df %>%
+  mutate(calc.SBP.pct = 
+           unlist(apply(., 1, function(x) 
+             BPappCalculations(
+               age = as.numeric(x['age']), 
+               height = as.numeric(x['height']), 
+               sex = x['sex'], 
+               BP = as.numeric(x['SBP']), 
+               SBP.DBP = "SBP"
+             )$pcnt)),
+         calc.DBP.pct = 
+           unlist(apply(., 1, function(x) 
+             BPappCalculations(
+               age = as.numeric(x['age']), 
+               height = as.numeric(x['height']), 
+               sex = x['sex'], 
+               BP = as.numeric(x['DBP']), 
+               SBP.DBP = "DBP"
+             )$pcnt))) %>%
+  select(Obs, pub.SBP.pct, calc.SBP.pct, pub.DBP.pct, calc.DBP.pct)
+head(df)
+```
+* When you compare the `pub.` and `calc.` values of a patients systolic or diastolic percentiles, you will see that the values are identical, indicating that our function generates the same results as the published SAS code.
